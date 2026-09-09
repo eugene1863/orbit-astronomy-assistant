@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Orbit · Astronomy Assistant</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#080e1b;color:#ecf2ff}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 75% 0,#1c2850,transparent 55%);min-height:100vh}
+header,main,footer{max-width:1100px;margin:auto;padding:26px}header{display:flex;justify-content:space-between;align-items:center}
+.brand{font-size:23px;font-weight:750;letter-spacing:3px}.tag{color:#9cafd2;font-size:13px}
+h1{font-size:clamp(32px,5vw,54px);letter-spacing:-2px;margin:22px 0 12px}p{color:#aabbd5;line-height:1.7}
+.layout{display:grid;grid-template-columns:1.5fr 1fr;gap:22px;margin-top:30px}.panel{background:#101b2dcc;border:1px solid #2a3850;border-radius:20px;padding:24px}
+h2{font-size:18px;margin:0 0 10px}.chips{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0}
+button{background:#96b7ff;color:#071224;border:0;border-radius:10px;padding:12px 17px;font:inherit;cursor:pointer}
+button:disabled{opacity:.5;cursor:wait}.chips button{background:#202f48;color:#cfdeff;font-size:12px;padding:9px}
+#messages{height:330px;overflow:auto;display:flex;flex-direction:column;gap:12px;padding:4px}
+.message{padding:14px;border-radius:13px;background:#1b2940;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere}
+.user{background:#314778;align-self:flex-end}.message a{color:#adc9ff;font-size:13px}
+form{display:flex;gap:10px;margin-top:18px}input[type=text]{min-width:0;flex:1;border:1px solid #41516f;background:#0b1424;color:white;border-radius:10px;padding:12px;font:inherit}
+input[type=file]{max-width:100%;margin:20px 0}#preview{width:100%;max-height:230px;object-fit:contain;display:none;border-radius:12px}
+#result{white-space:pre-wrap;line-height:1.7;margin-top:16px;color:#c4d6f6}.status{display:inline-block;font-size:12px;border:1px solid #536187;color:#c4d6f6;border-radius:20px;padding:6px 10px}
+footer{font-size:12px;color:#879bbd}label{display:block;color:#aabbd5;font-size:14px}
+@media(max-width:760px){.layout{grid-template-columns:1fr}header,main,footer{padding:18px}.tag{display:none}form button{padding:12px}}
+</style></head>
+<body><header><div class="brand">◉ ORBIT</div><span class="tag">YOUR WINDOW INTO THE UNIVERSE</span></header>
+<main><span class="status">Astronomy learning lab</span><h1>A little curiosity.<br>An entire universe.</h1>
+<p>Explore astronomy through questions and galaxy images.</p>
+<div class="layout"><section class="panel"><h2>Ask the universe</h2><p>Reference-based answers with links to learn more. This starter covers a small set of astronomy topics.</p>
+<div class="chips"><button type="button">What is a black hole?</button><button type="button">How do stars form?</button><button type="button">What is a light-year?</button></div>
+<div id="messages" role="log" aria-live="polite"><div class="message">Hello, explorer. What would you like to learn about?</div></div>
+<form id="chat"><input id="question" type="text" aria-label="Astronomy question" placeholder="Ask an astronomy question…" maxlength="2000" required><button id="send">Send ↗</button></form>
+</section><section class="panel"><h2>Galaxy explorer</h2><p>Upload a cropped galaxy image to explore its shape with a convolutional neural network.</p>
+<span id="status" class="status">Checking model…</span><label for="upload" style="margin-top:20px">Choose a JPG or PNG image (up to 5 MB)</label>
+<input id="upload" type="file" accept="image/jpeg,image/png"><img id="preview" alt="Your uploaded galaxy"><button id="classify" disabled>Classify galaxy</button>
+<div id="result" role="status" aria-live="polite">Classes: elliptical · irregular · spiral</div></section></div></main>
+<footer>Built for learning · Text answers use a local reference set · CNN training requires labeled images</footer>
+<script>
+const $=id=>document.getElementById(id);let trained=false;
+function message(text,kind,sources=[]){const el=document.createElement('div');el.className='message '+kind;el.textContent=text;
+for(const source of sources){el.appendChild(document.createElement('br'));const a=document.createElement('a');a.href=source.url;a.textContent='Read more: '+source.title;a.target='_blank';a.rel='noopener noreferrer';el.appendChild(a);}
+$('messages').appendChild(el);$('messages').scrollTop=$('messages').scrollHeight;}
+async function post(path,data){const response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const result=await response.json();if(!response.ok)throw Error(result.error);return result;}
+$('chat').addEventListener('submit',async e=>{e.preventDefault();const q=$('question').value.trim();if(!q||$('send').disabled)return;message(q,'user');$('question').value='';$('send').disabled=true;
+try{const result=await post('/api/chat',{question:q});message(result.answer,'',result.sources);}catch(error){message(error.message,'');}finally{$('send').disabled=false;$('question').focus();}});
+document.querySelectorAll('.chips button').forEach(b=>b.onclick=()=>{$('question').value=b.textContent;$('chat').requestSubmit();});
+fetch('/api/status').then(r=>r.json()).then(s=>{trained=s.trained;$('status').textContent=trained?'Trained checkpoint available':'CNN not trained yet';$('classify').disabled=!trained||!$('upload').files.length;if(!trained)$('result').textContent='Chat is ready. To enable image classification, follow the training steps in README.md.';}).catch(()=>{$('status').textContent='Server unavailable';});
+let previewUrl;
+$('upload').onchange=()=>{const file=$('upload').files[0];if(previewUrl)URL.revokeObjectURL(previewUrl);$('preview').style.display='none';$('classify').disabled=true;if(!file)return;
+if(file.size>5*1024*1024||!['image/jpeg','image/png'].includes(file.type)){$('result').textContent='Please choose a JPG or PNG under 5 MB.';return;}
+previewUrl=URL.createObjectURL(file);$('preview').src=previewUrl;$('preview').style.display='block';$('classify').disabled=!trained;};
+$('classify').onclick=async()=>{const file=$('upload').files[0];if(!file)return;$('classify').disabled=true;$('result').textContent='Analyzing…';
+try{const image=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(',')[1]);reader.onerror=()=>reject(Error('Could not read image.'));reader.readAsDataURL(file);});
+const result=await post('/api/classify',{image});$('result').textContent=result.label.toUpperCase()+'\n'+Object.entries(result.scores).map(([k,v])=>k+': '+(v*100).toFixed(1)+'%').join('\n')+'\n\n'+result.note;
+}catch(error){$('result').textContent=error.message;}finally{$('classify').disabled=!trained;}};
+</script></body></html>
